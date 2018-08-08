@@ -29,7 +29,7 @@ start(){
     fi
     mkdir -p log
 
-    nohup $START_COMMAND  </dev/null &>> /dev/termination-log  &
+    $START_COMMAND  </dev/null &>> /dev/termination-log  &
 
     return 0
 }
