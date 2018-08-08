@@ -8,7 +8,7 @@
 
 ###############用户修改部分################
 readonly PACKAGE_DIR_NAME=""    #如果在pom文件中定义了模块，请设置该变量,可选项
-readonly PACKAGE_JAR_NAME="devops-java-demo"    #定义产出的jar包名,必填项
+readonly PACKAGE_JAR_NAME="devops-java-demo.jar"    #定义产出的jar包名,必填项
 #最终的抽包路径为$OUTPUT
 ###########################################
 
