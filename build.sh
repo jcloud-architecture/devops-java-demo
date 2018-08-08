@@ -1,94 +1,99 @@
 #!/bin/bash
-#
-# 1.下载jdk和maven3.0.5,为编译作准备
-# 2.进行maven编译(依赖assembly)
-# 3.替换启动脚本(线上和本地的启动参数可能不一样)
-# 4.打包
-# lishipu1@jd.com
-#
+###############################################################################
+#编译脚本的原理是将编译结果放到output目录中，这个样例模版提供一个产生
+#jar包的最基本的编译脚本，对于特殊的需求请酌情考虑
+#1、需要有一个control文件在工作目录的根目录
+#2、该脚本支持参数化，参数将传入build_package函数（内容为最终执行的编译命令）
+#，用$1,$2....表示，第1,2...个参数
 
-set -eu
-Prompt(){
-	echo "[$(date '+%D %H:%M:%S')] $@"
-}
+###############用户修改部分################
+readonly PACKAGE_DIR_NAME=""    #如果在pom文件中定义了模块，请设置该变量,可选项
+readonly PACKAGE_JAR_NAME="devops-java-demo"    #定义产出的jar包名,必填项
+#最终的抽包路径为$OUTPUT
+###########################################
 
-WORKSPACE=$(cd $(dirname $0); pwd)
-Prompt "Work dir: $WORKSPACE"
-
-cd $WORKSPACE
-
-#export PATH=$WORKSPACE/opbin/apache-maven-3.0.5/bin:$PATH
-
-Prompt "Setting up environment variables ..."
-#export JAVA_HOME=$WORKSPACE/opbin/jdk1.8.0_111
-#export PATH=$JAVA_HOME/bin:$PATH
-
-export LANG="en_US.UTF-8"
-
-#if [ ! -d $JAVA_HOME ]
-#then
-#    Prompt "download and unzip jdk ..."
-#    cd $WORKSPACE/opbin && \
-#     curl http://172.22.132.84/hawkeye-deps/jdk-8u111-linux-x64.tar.gz > jdk-8u111-linux-x64.tar.gz \
-#     && tar zxf jdk-8u111-linux-x64.tar.gz && cd -
-#    #cd $WORKSPACE/opbin && tar zxf jdk1.8.0_111-linux-x64.tar.gz && cd -
-#fi
-
-#readonly LOCAL_MVN=$(which mvn)
-#if test -z ${LOCAL_MVN}
-#then
-Prompt "download and unzip maven, copy setttings ..."
-#cd $WORKSPACE/opbin && \
-# curl http://172.22.132.84/hawkeye-deps/apache-maven-3.0.5-bin.tar.gz > apache-maven-3.0.5-bin.tar.gz \
-# && tar zxf apache-maven-3.0.5-bin.tar.gz && cp -f settings.xml apache-maven-3.0.5/conf && cd -
-#cd $WORKSPACE/opbin && tar zxf apache-maven-3.0.5-bin.tar.gz && cp -f settings.xml apache-maven-3.0.5/conf && cd -
-#export PATH=$WORKSPACE/opbin/apache-maven-3.0.5/bin:$PATH
-#fi
-
-#Prompt "JAVA_HOME::"$JAVA_HOME
-#Prompt "PATH::"$PATH
-
-Prompt "Setting up environment variables OK..."
-
-
-OUTPUT=$WORKSPACE/target/ark-1.0-SNAPSHOT-all/output
-
-Prompt "Clean and Package"
-mvn clean -U package -Dmaven.test.skip=true || exit $?
-#mvn clean package || exit $?
-#mvn clean cobertura:cobertura || exit $?
-
-Prompt "Package for deploy"
-rm -fr $WORKSPACE/output
-mv $OUTPUT ./
-
-Prompt "Copy file"
-mkdir $WORKSPACE/output/opbin
-
-#cp -r $WORKSPACE/target/ranger-server-1.0-SNAPSHOT-all/output/* $WORKSPACE/output/
-#cp $WORKSPACE/swagger/swagger-ui.tar.gz $WORKSPACE/output/ && cd $WORKSPACE/output && tar -xzf swagger-ui.tar.gz && \
-#rm -f swagger-ui.tar.gz && cd - > /dev/null
-#cp $WORKSPACE/opbin/zookeeper.tar.gz $WORKSPACE/output/opbin
-#cp $WORKSPACE/opbin/redis.tar.gz $WORKSPACE/output/opbin
-#rm -rf $WORKSPACE/output/opbin/opbin
-
-Prompt "Generate version and timestamp..."
-echo $(date -d  today +%Y%m%d%H%M%S) > $WORKSPACE/output/version
-git log | head -1 | awk '{print $2}' >> $WORKSPACE/output/version
-Prompt "version::"`cat $WORKSPACE/output/version`
-
-Prompt "replace control"
-
-if [ "$COMPILER_TYPE" = "IMAGE" ]; then
-    Prompt "rename control_image to control"
-    mv $WORKSPACE/output/bin/control_image $WORKSPACE/output/bin/control
-elif [ "$COMPILER_TYPE" = "PACKAGE" ];then
-    Prompt "rename control_package to control"
-    mv $WORKSPACE/output/bin/control_package $WORKSPACE/output/bin/control
-    curl http://172.22.132.84/hawkeye-deps/jdk-8u111-linux-x64.tar.gz > $WORKSPACE/output/jdk-8u111-linux-x64.tar.gz
+if [[ "${PACKAGE_JAR_NAME}" == "" ]];then
+    echo "Please set "PACKAGE_JAR_NAME" value"
+    exit 1
 fi
 
+function set_work_dir
+{
+    readonly OUTPUT=$(pwd)/output
+    readonly WORKSPACE_DIR=$(pwd)
+}
 
-Prompt "build finish exit:"$?
+#清理编译构建目录操作
+function clean_before_build
+{
+    cd ${WORKSPACE_DIR}
+    mvn clean
+    rm -rf ${OUTPUT}
+}
 
-exit $?
+#实际的编译命令
+#这个函数中可使用$1,$2...获取第1,2...个参数
+function build_package()
+{
+    cd ${WORKSPACE_DIR}
+    mvn package -Dmaven.test.skip=true || return 1
+}
+
+#建立最终发布的目录
+function build_dir
+{
+    mkdir ${OUTPUT} || return 1
+    mkdir ${OUTPUT}/bin || return 1
+    mkdir ${OUTPUT}/logs || return 1
+}
+
+function dir_not_empty()
+{
+    if [[ ! -d $1 ]];then
+        return 1
+    fi
+    if [[ $(ls $1|wc -l) -eq 0 ]];then
+        return 1
+    fi
+    return 0
+}
+
+#拷贝编译结果到发布的目录
+function copy_result
+{
+    cd ${WORKSPACE_DIR}
+    cp -r ./${PACKAGE_DIR_NAME}/target/${PACKAGE_JAR_NAME} ${OUTPUT}/bin/${PACKAGE_JAR_NAME} || return 1
+    cp -r ./control ${OUTPUT}/bin || return 1
+   #如果有其他需要拷贝的文件，可以在这里添加
+}
+
+#执行
+function main()
+{
+    cd $(dirname $0)
+    set_work_dir
+
+    echo "At: "$(date "+%Y-%m-%d %H:%M:%S") 'Cleaning...'
+    clean_before_build || exit 1
+    echo "At: "$(date "+%Y-%m-%d %H:%M:%S") 'Clean completed'
+    echo
+
+    echo "At: "$(date "+%Y-%m-%d %H:%M:%S") 'Building...'
+    build_package $@ || exit 1
+    echo "At: "$(date "+%Y-%m-%d %H:%M:%S") 'Build completed'
+    echo
+
+    echo "At: "$(date "+%Y-%m-%d %H:%M:%S") 'Making dir...'
+    build_dir || exit 1
+    echo "At: "$(date "+%Y-%m-%d %H:%M:%S") 'Make completed'
+    echo
+
+    echo "At: "$(date "+%Y-%m-%d %H:%M:%S") 'Copy result to publish dir...'
+    copy_result || exit 1
+    echo "At: "$(date "+%Y-%m-%d %H:%M:%S") 'Copy completed'
+    echo
+
+    exit 0
+}
+
+main $@
