@@ -63,7 +63,7 @@ function copy_result
 {
     cd ${WORKSPACE_DIR}
     cp -r ./${PACKAGE_DIR_NAME}/target/${PACKAGE_JAR_NAME} ${OUTPUT}/bin/${PACKAGE_JAR_NAME} || return 1
-    cp -r ./control ${OUTPUT}/bin || return 1
+    cp -r ./bin/control ${OUTPUT}/bin || return 1
    #如果有其他需要拷贝的文件，可以在这里添加
 }
 
