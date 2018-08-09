@@ -29,7 +29,7 @@ start(){
     fi
     mkdir -p log
 
-    $START_COMMAND  </dev/null &>> /export/Logs/java-demo.log  &
+    $START_COMMAND  </dev/null &>> /export/Logs/java-demo/0.java-demo/java-demo.log  &
 
     return 0
 }
